@@ -5,148 +5,141 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"replacement/algorithms"
+	"strings"
 )
 
-// Função para rodar o algoritmo Segunda Chance em uma goroutine
-func runSecondChance(acessos []string, numFrames int, result chan<- int) {
-	faltas := algorithms.SecondChance(acessos, numFrames)
-	result <- faltas
-}
-
-// Função para rodar o algoritmo Ótimo em uma goroutine
-func runOptimal(acessos []string, numFrames int, mapaFuturo map[string][]int, result chan<- int) {
-	faltas := algorithms.Optimal(acessos, numFrames, mapaFuturo)
-	result <- faltas
-}
-
-func lerAcessosComFuturo(filename string) ([]string, map[string][]int, error) {
+// Function to read page accesses from the file while tracking future accesses
+func readAccesses(filename string) ([]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer file.Close()
 
-	var acessos []string
-	mapaFuturo := make(map[string][]int)
+	var accesses []string
 	scanner := bufio.NewScanner(file)
-
-	// Compile uma expressão regular para capturar o formato da página (I ou D seguido de números)
-	re := regexp.MustCompile(`[A-Z]\d+`)
-
-	// Itera sobre cada linha do arquivo
 	i := 0
 	for scanner.Scan() {
-		line := scanner.Text()
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			i++
+			continue
+		}
 
-		// Extrai a página no formato "I0", "D1", etc.
-		match := re.FindString(line)
-		if match != "" {
-			// Armazena o acesso
-			acessos = append(acessos, match)
-
-			// Preenche o mapa de acessos futuros
-			mapaFuturo[match] = append(mapaFuturo[match], i)
+		if len(line) > 1 {
+			page := line[1:]
+			accesses = append(accesses, page)
 		}
 		i++
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	fmt.Printf("Quantidade de registros no arquivo %s: %d\n\n", filepath.Base(filename), len(acessos))
+	fmt.Printf("Number of entries in file %s: %d\n\n", filepath.Base(filename), len(accesses))
 
-	return acessos, mapaFuturo, nil
+	return accesses, nil
+}
+
+// Function to run the Second Chance algorithm in a goroutine
+func runSecondChance(accesses []string, numFrames int, result chan<- int) {
+	faults := algorithms.SecondChance(accesses, numFrames)
+	result <- faults
+}
+
+// Function to run the Optimal algorithm in a goroutine
+func runOptimal(accesses []string, numFrames int, result chan<- int) {
+	faults := algorithms.Optimal(accesses, numFrames)
+	result <- faults
 }
 
 func main() {
-	// Caminho para a pasta "files"
+	// Path to the "files" folder
 	dir := "../files"
 
-	// Lê os arquivos dentro da pasta
+	// Reads the files in the directory
 	files, err := os.ReadDir(dir)
 	if err != nil {
-		fmt.Println("Erro ao ler a pasta:", err)
+		fmt.Println("Error reading the folder:", err)
 		return
 	}
 
-	// Lista os arquivos disponíveis
-	fmt.Println("Arquivos disponíveis:")
+	// Lists the available files
+	fmt.Println("Available files:")
 	for i, file := range files {
 		fmt.Printf("%d - %s\n", i+1, file.Name())
 	}
 
-	// Solicita ao usuário que escolha um arquivo
+	// Ask the user to select a file
 	var fileChoice int
-	fmt.Print("Escolha o arquivo (digite o número): ")
+	fmt.Print("Choose the file (enter the number): ")
 	_, err = fmt.Scanln(&fileChoice)
 	if err != nil || fileChoice < 1 || fileChoice > len(files) {
-		fmt.Println("Escolha inválida.")
+		fmt.Println("Invalid choice.")
 		return
 	}
 
-	// Caminho completo para o arquivo selecionado
+	// Full path to the selected file
 	selectedFile := filepath.Join(dir, files[fileChoice-1].Name())
-	fmt.Printf("Você selecionou: %s\n", selectedFile)
+	fmt.Printf("You selected: %s\n", selectedFile)
 
-	// Lê acessos e constrói o mapa de acessos futuros ao mesmo tempo
-	acessos, mapaFuturo, err := lerAcessosComFuturo(selectedFile)
+	// Read accesses
+	accesses, err := readAccesses(selectedFile)
 	if err != nil {
-		fmt.Println("Erro ao ler o arquivo:", err)
+		fmt.Println("Error reading the file:", err)
 		return
 	}
 
-	// Opções de memórias físicas em KB (1 página = 4KB)
-	memorias := []int{1 * 1024 * 1024, 128 * 1024, 16 * 1024, 8 * 1024}
+	// Options for physical memory in KB (1 page = 4KB)
+	memories := []int{1 * 1024 * 1024, 128 * 1024, 16 * 1024, 8 * 1024}
 
-	// Lista as opções de memórias físicas
-	fmt.Println("Memórias disponíveis (em KB):")
-	for i, memoria := range memorias {
-		fmt.Printf("%d - %d KB\n", i+1, memoria)
+	// Lists the available memory options
+	fmt.Println("Available memories (in KB):")
+	for i, memory := range memories {
+		fmt.Printf("%d - %d KB\n", i+1, memory)
 	}
-	fmt.Println("5 - Escolher manualmente o tamanho da memória")
+	fmt.Println("5 - Choose memory size manually")
 
-	// Solicita ao usuário que escolha o tamanho da memória
+	// Ask the user to choose the memory size
 	var memoryChoice int
-	fmt.Print("Escolha a memória (digite o número): ")
+	fmt.Print("Choose the memory (enter the number): ")
 	_, err = fmt.Scanln(&memoryChoice)
 	if err != nil || memoryChoice < 1 || memoryChoice > 5 {
-		fmt.Println("Escolha inválida.")
+		fmt.Println("Invalid choice.")
 		return
 	}
 
 	var numFrames int
 
 	if memoryChoice == 5 {
-		// Se o usuário escolher a opção de definir manualmente
-		fmt.Print("Digite o número de frames (tamanho da memória): ")
+		// If the user chooses to define manually
+		fmt.Print("Enter the number of frames (memory size): ")
 		_, err = fmt.Scanln(&numFrames)
 		if err != nil || numFrames <= 0 {
-			fmt.Println("Escolha inválida.")
+			fmt.Println("Invalid choice.")
 			return
 		}
 	} else {
-		// Converte de KB para número de frames (1 frame = 4 KB)
-		selectedMemory := memorias[memoryChoice-1]
+		// Convert from KB to number of frames (1 frame = 4 KB)
+		selectedMemory := memories[memoryChoice-1]
 		numFrames = selectedMemory / 4
-		fmt.Printf("Você selecionou: %d KB de memória, que equivale a %d frames\n\n", selectedMemory, numFrames)
+		fmt.Printf("You selected: %d KB of memory, which equals %d frames\n\n", selectedMemory, numFrames)
 	}
 
-	// Canais para receber os resultados dos algoritmos
+	// Channels to receive the results of the algorithms
 	chanSecondChance := make(chan int)
 	chanOptimal := make(chan int)
 
-	// Executa os algoritmos em paralelo usando goroutines
-	go runSecondChance(acessos, numFrames, chanSecondChance)
-	go runOptimal(acessos, numFrames, mapaFuturo, chanOptimal)
+	// Run the algorithms in parallel using goroutines
+	go runSecondChance(accesses, numFrames, chanSecondChance)
+	go runOptimal(accesses, numFrames, chanOptimal)
 
-	// Recebe os resultados
-	faltasSC := <-chanSecondChance
-	faltasOptimal := <-chanOptimal
+	// Receive the results
+	faultsOptimal := <-chanOptimal
+	fmt.Printf("Page faults (Optimal): %d\n", faultsOptimal)
 
-	// Imprime os resultados
-	fmt.Printf("Faltas de página (Segunda Chance): %d\n", faltasSC)
-	fmt.Printf("Faltas de página (Ótimo): %d\n", faltasOptimal)
+	faultsSC := <-chanSecondChance
+	fmt.Printf("Page faults (Second Chance): %d\n", faultsSC)
 }
