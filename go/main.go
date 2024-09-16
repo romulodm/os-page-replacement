@@ -28,7 +28,7 @@ func readAccesses(filename string) ([]string, error) {
 		}
 
 		if len(line) > 1 {
-			page := line[1:]
+			page := line
 			accesses = append(accesses, page)
 		}
 		i++
@@ -39,20 +39,22 @@ func readAccesses(filename string) ([]string, error) {
 	}
 
 	fmt.Printf("Number of entries in file %s: %d\n\n", filepath.Base(filename), len(accesses))
-
 	return accesses, nil
 }
 
 // Function to run the Second Chance algorithm in a goroutine
-func runSecondChance(accesses []string, numFrames int, result chan<- int) {
-	faults := algorithms.SecondChance(accesses, numFrames)
+func runSecondChance(accesses []string, numFrames int, result chan<- int, loads chan<- map[string]int) {
+	faults, loadsMap := algorithms.SecondChance(accesses, numFrames)
 	result <- faults
+	loads <- loadsMap
 }
 
 // Function to run the Optimal algorithm in a goroutine
-func runOptimal(accesses []string, numFrames int, result chan<- int) {
-	faults := algorithms.Optimal(accesses, numFrames)
+func runOptimal(accesses []string, numFrames int, result chan<- int, loads chan<- map[string]int) {
+	faults, loadsMap := algorithms.Optimal(accesses, numFrames)
 	result <- faults
+	loads <- loadsMap
+
 }
 
 func main() {
@@ -132,9 +134,13 @@ func main() {
 	chanSecondChance := make(chan int)
 	chanOptimal := make(chan int)
 
+	// Channels to receive the map of the page loads
+	chanOptimalLoads := make(chan map[string]int)
+	chanSecondChanceLoads := make(chan map[string]int)
+
 	// Run the algorithms in parallel using goroutines
-	go runSecondChance(accesses, numFrames, chanSecondChance)
-	go runOptimal(accesses, numFrames, chanOptimal)
+	go runSecondChance(accesses, numFrames, chanSecondChance, chanSecondChanceLoads)
+	go runOptimal(accesses, numFrames, chanOptimal, chanOptimalLoads)
 
 	// Receive the results
 	faultsOptimal := <-chanOptimal
@@ -142,4 +148,27 @@ func main() {
 
 	faultsSC := <-chanSecondChance
 	fmt.Printf("Page faults (Second Chance): %d\n", faultsSC)
+
+	// Receive the rpage loads
+	loadsOptimal := <-chanOptimalLoads
+	loadsSC := <-chanSecondChanceLoads
+
+	// Ask if the user wants to see the number of loads per page
+	var showLoads string
+	fmt.Print("\nDo you want to see the number of loads per page? (y/n): ")
+	_, err = fmt.Scanln(&showLoads)
+	if err != nil {
+		fmt.Println("Invalid input.")
+		return
+	}
+
+	// If user wants to see the loads
+	if strings.ToLower(showLoads) == "y" {
+		fmt.Printf("\n%-10s %-10s %-10s\n", "Page", "Optimal", "Second Chance")
+		fmt.Println(strings.Repeat("-", 30))
+		for page, optimalLoads := range loadsOptimal {
+			secondChanceLoads := loadsSC[page]
+			fmt.Printf("%-10s %-10d %-10d\n", page, optimalLoads, secondChanceLoads)
+		}
+	}
 }
