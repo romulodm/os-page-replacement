@@ -2,8 +2,9 @@ package algorithms
 
 // The Optimal page replacement algorithm predicts future page accesses
 // and always replaces the page that won't be used for the longest time in the future
-func Optimal(accesses []string, numFrames int) int {
+func Optimal(accesses []string, numFrames int) (int, map[string]int) {
 	faults := 0
+	loads := make(map[string]int) // Counter to count the loads of each page
 
 	// Pre-process the next uses of each page
 	// This step builds a map of where each page will be used next, to simulate future knowledge
@@ -28,6 +29,7 @@ func Optimal(accesses []string, numFrames int) int {
 
 		// Page fault occurs if the page is not in memory
 		faults++
+		loads[page]++ // Increment the page counter
 
 		// If memory is full, we need to replace a page
 		if len(memoryList) >= numFrames {
@@ -63,5 +65,5 @@ func Optimal(accesses []string, numFrames int) int {
 		memoryList = append(memoryList, page)
 	}
 
-	return faults
+	return faults, loads
 }

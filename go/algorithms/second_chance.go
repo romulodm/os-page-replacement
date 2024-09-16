@@ -10,11 +10,13 @@ type Page struct {
 // It gives each page a "second chance" before it is replaced, using a reference bit;
 // If the reference bit is 1, the page is given a second chance and its bit is reset to 0;
 // If the bit is 0, the page is replaced. This algorithm aims to balance simplicity and efficiency;
-func SecondChance(accesses []string, numFrames int) int {
+func SecondChance(accesses []string, numFrames int) (int, map[string]int) {
 	memory := make([]Page, numFrames)  // Initialize memory with a fixed size, tracking the pages and their reference bits
 	pageMap := make(map[string]int)    // Map to track page positions in memory
 	queue := make([]int, 0, numFrames) // Queue to manage page order
+
 	faults := 0
+	loads := make(map[string]int) // Counter to count the loads of each page
 
 	pos := 0 // Pointer for the page to be replaced
 
@@ -28,6 +30,7 @@ func SecondChance(accesses []string, numFrames int) int {
 
 		// Page fault occurs if the page is not in memory
 		faults++
+		loads[page]++ // Increment the page counter
 
 		// If memory is full, we need to replace a page
 		if len(queue) >= numFrames {
@@ -55,5 +58,5 @@ func SecondChance(accesses []string, numFrames int) int {
 		}
 	}
 
-	return faults
+	return faults, loads
 }
